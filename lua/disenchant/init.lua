@@ -22,12 +22,18 @@ function M.run_objdump_on_object_file()
     local result = handle:read("*a")
     handle:close()
 
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.fn.bufname(buf) == "disenchant-" .. base_name then
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end
+    end
+
     vim.cmd("vnew")
     local buf = vim.api.nvim_get_current_buf()
 
     vim.api.nvim_buf_set_option(buf, "modifiable", true)
     vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-    vim.api.nvim_buf_set_name(buf, "disenchant")
+    vim.api.nvim_buf_set_name(buf, "disenchant-" .. base_name)
 
     local lines = {}
     for line in result:gmatch("[^\r\n]+") do
