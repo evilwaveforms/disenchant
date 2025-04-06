@@ -1,5 +1,44 @@
 local M = {}
 
+local default_config = {
+  keymap = { disassemble = "<leader>od", }
+}
+
+local action_funcs = { disassemble = function() M.run_objdump_on_object_file() end, }
+local action_descs = { disassemble = "disenchant: DISASSEMBLE OBJECT FILE", }
+local config = vim.deepcopy(default_config)
+
+local function deep_extend(target, source)
+  for k, v in pairs(source) do
+    if type(v) == "table" and type(target[k]) == "table" then
+      deep_extend(target[k], v)
+    else
+      target[k] = v
+    end
+  end
+  return target
+end
+
+function M.setup(opts)
+  opts = opts or {}
+  if vim.tbl_deep_extend then
+     config = vim.tbl_deep_extend('force', config, opts)
+  else
+     config = deep_extend(config, opts)
+  end
+
+  for action_name, default_keybind in pairs(default_config.keymap) do
+    local keybind_to_set = config.keymap and config.keymap[action_name]
+    if type(keybind_to_set) == "string" and keybind_to_set ~= "" then
+      local func = action_funcs[action_name]
+      local desc = action_descs[action_name] or ("disenchant: " .. action_name)
+      if func then
+        vim.keymap.set('n', keybind_to_set, func, { desc = desc, silent = true })
+      end
+    end
+  end
+end
+
 function M.find_project_root()
   local markers = {'.git', 'Makefile', 'compile_commands.json'}
   local path = vim.fn.expand('%:p:h')
@@ -72,7 +111,5 @@ function M.read_file(file_path)
     f:close()
     return lines
 end
-
-vim.keymap.set('n', '<Leader>of', function() require('disenchant').run_objdump_on_object_file() end, { desc = "DISASSEMBLE" })
 
 return M
