@@ -65,14 +65,14 @@ function M.create_asm_buf(file_name, objdump_result)
         end
     end
     vim.cmd("vnew")
-    local asm_buf = vim.api.nvim_get_current_buf()
+    local asm_buf_num = vim.api.nvim_get_current_buf()
     local asm_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_buf_set_option(asm_buf, "modifiable", true)
-    vim.api.nvim_buf_set_option(asm_buf, "buftype", "nofile")
-    vim.api.nvim_buf_set_name(asm_buf, "disenchant-" .. file_name)
-    vim.api.nvim_buf_set_lines(asm_buf, 0, -1, false, vim.split(objdump_result, '\n'))
-    vim.api.nvim_buf_set_option(asm_buf, "modifiable", false)
-    return asm_buf, asm_win
+    vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", true)
+    vim.api.nvim_buf_set_option(asm_buf_num,  "buftype", "nofile")
+    vim.api.nvim_buf_set_name(asm_buf_num, "disenchant-" .. file_name)
+    vim.api.nvim_buf_set_lines(asm_buf_num, 0, -1, false, vim.split(objdump_result, '\n'))
+    vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", false)
+    return asm_buf_num, asm_win
 end
 
 function M.search_target_line(current_file, current_line_nr, asm_buf)
@@ -96,26 +96,33 @@ function M.search_target_line(current_file, current_line_nr, asm_buf)
 end
 
 function M.disenchant()
-    local current_file = vim.api.nvim_buf_get_name(0)
-    if not current_file or current_file == "" then
+    local current_buf_num = vim.api.nvim_get_current_buf()
+    local current_file_path = vim.api.nvim_buf_get_name(current_buf_num)
+    if not current_file_path or current_file_path == "" then
         print("NO FILE IS CURRENTLY OPEN")
         return
     end
 
     -- file name without extension
-    local file_name = vim.fn.fnamemodify(current_file, ":t:r")
+    local file_name = vim.fn.fnamemodify(current_file_path, ":t:r")
     local file_path = vim.fn.expand('%:p')
     local project_root = M.find_project_root()
     local original_win = vim.api.nvim_get_current_win()
     local original_cursor_pos = vim.api.nvim_win_get_cursor(original_win)
     local current_line_nr = original_cursor_pos[1]
+    local ft = vim.bo[current_buf_num].filetype
 
     -- local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
     local compile_cmd
+    if ft == 'c' or ft == 'cpp' then
+        compile_cmd = string.format('cd %s && gcc -g3 -c %s -o %s.o', project_root, file_path, file_name)
+    else
+        vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
+        return
+    end
     -- if has_makefile then
     --     compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
     -- else
-    compile_cmd = string.format('cd %s && gcc -g3 -c %s -o %s.o', project_root, file_path, file_name)
     -- end
 
     local compile_result = vim.fn.system(compile_cmd)
@@ -126,8 +133,8 @@ function M.disenchant()
 
     local objdump_cmd = string.format('cd %s && objdump -Sl -Mintel --source-comment --no-show-raw-insn -d %s.o', project_root, file_name)
     local objdump_result = vim.fn.system(objdump_cmd)
-    local asm_buf, asm_win = M.create_asm_buf(file_name, objdump_result)
-    local target_line = M.search_target_line(current_file, current_line_nr, asm_buf)
+    local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
+    local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
 
     vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
     vim.cmd('normal! zz')
