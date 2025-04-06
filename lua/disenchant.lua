@@ -1,10 +1,12 @@
+-- Compile current source file to an object file, use objdump to display assembly of the object file,
+-- attempt to navigate to same line of code in the assembly code.
 local M = {}
 
 local default_config = {
   keymap = { disassemble = "<leader>od", }
 }
 
-local action_funcs = { disassemble = function() M.run_objdump_on_object_file() end, }
+local action_funcs = { disassemble = function() M.disenchant() end, }
 local action_descs = { disassemble = "disenchant: DISASSEMBLE OBJECT FILE", }
 local config = vim.deepcopy(default_config)
 
@@ -27,7 +29,7 @@ function M.setup(opts)
      config = deep_extend(config, opts)
   end
 
-  for action_name, default_keybind in pairs(default_config.keymap) do
+  for action_name, _ in pairs(default_config.keymap) do
     local keybind_to_set = config.keymap and config.keymap[action_name]
     if type(keybind_to_set) == "string" and keybind_to_set ~= "" then
       local func = action_funcs[action_name]
@@ -55,7 +57,7 @@ function M.find_project_root()
   return path
 end
 
-function M.create_asm_buf(file_name, objdump_result) 
+function M.create_asm_buf(file_name, objdump_result)
     -- Delete if already exists.
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         if vim.fn.bufname(buf) == "disenchant-" .. file_name then
@@ -73,7 +75,7 @@ function M.create_asm_buf(file_name, objdump_result)
     return asm_buf, asm_win
 end
 
-function M.run_objdump_on_object_file()
+function M.disenchant()
     local current_file = vim.api.nvim_buf_get_name(0)
     if not current_file or current_file == "" then
         print("NO FILE IS CURRENTLY OPEN")
@@ -100,9 +102,7 @@ function M.run_objdump_on_object_file()
 
     local objdump_cmd = string.format('cd %s && objdump -d -Sl --source-comment --no-show-raw-insn %s.o', project_root, file_name)
     local objdump_result = vim.fn.system(objdump_cmd)
-    asm_buf, asm_win = M.create_asm_buf(current_file, objdump_result)
-
-
+    local asm_buf, asm_win = M.create_asm_buf(file_name, objdump_result)
         end
     end
 
