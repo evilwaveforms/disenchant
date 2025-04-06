@@ -55,6 +55,24 @@ function M.find_project_root()
   return path
 end
 
+function M.create_asm_buf(file_name, objdump_result) 
+    -- Delete if already exists.
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.fn.bufname(buf) == "disenchant-" .. file_name then
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end
+    end
+    vim.cmd("vnew")
+    local asm_buf = vim.api.nvim_get_current_buf()
+    local asm_win = vim.api.nvim_get_current_win()
+    vim.api.nvim_buf_set_option(asm_buf, "modifiable", true)
+    vim.api.nvim_buf_set_option(asm_buf, "buftype", "nofile")
+    vim.api.nvim_buf_set_name(asm_buf, "disenchant-" .. file_name)
+    vim.api.nvim_buf_set_lines(asm_buf, 0, -1, false, vim.split(objdump_result, '\n'))
+    vim.api.nvim_buf_set_option(asm_buf, "modifiable", false)
+    return asm_buf, asm_win
+end
+
 function M.run_objdump_on_object_file()
     local current_file = vim.api.nvim_buf_get_name(0)
     if not current_file or current_file == "" then
@@ -82,21 +100,12 @@ function M.run_objdump_on_object_file()
 
     local objdump_cmd = string.format('cd %s && objdump -d -Sl --source-comment --no-show-raw-insn %s.o', project_root, file_name)
     local objdump_result = vim.fn.system(objdump_cmd)
+    asm_buf, asm_win = M.create_asm_buf(current_file, objdump_result)
 
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.fn.bufname(buf) == "disenchant-" .. file_name then
-            vim.api.nvim_buf_delete(buf, { force = true })
+
         end
     end
 
-    vim.cmd("vnew")
-    local buf = vim.api.nvim_get_current_buf()
-
-    vim.api.nvim_buf_set_option(buf, "modifiable", true)
-    vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-    vim.api.nvim_buf_set_name(buf, "disenchant-" .. file_name)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(objdump_result, '\n'))
-    vim.api.nvim_buf_set_option(buf, "modifiable", false)
 end
 
 function M.read_file(file_path)
