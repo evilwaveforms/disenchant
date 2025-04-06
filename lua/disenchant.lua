@@ -75,6 +75,26 @@ function M.create_asm_buf(file_name, objdump_result)
     return asm_buf, asm_win
 end
 
+function M.search_target_line(current_file, current_line_nr, asm_buf)
+    local target_line = 1
+    --  Pattern for source line marker. e.g. /path/to/your/source.c:666
+    local search_pattern = string.format('^%s:%d', vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
+    local search_result = vim.fn.searchpos(search_pattern, 'nW')
+    if search_result[1] > 0 then
+        local instruction_pattern = '^\\s*[0-9a-fA-F]+:'
+        local start_line_for_instr_search = search_result[1]
+        local next_instr_line = vim.fn.search(instruction_pattern, 'nW', start_line_for_instr_search)
+        if next_instr_line > 0 then
+            target_line = next_instr_line
+        else
+            target_line = search_result[1] + 1
+            local line_count = vim.api.nvim_buf_line_count(asm_buf)
+            target_line = math.min(target_line, line_count)
+        end
+    end
+    return target_line
+end
+
 function M.disenchant()
     local current_file = vim.api.nvim_buf_get_name(0)
     if not current_file or current_file == "" then
@@ -86,6 +106,10 @@ function M.disenchant()
     local file_name = vim.fn.fnamemodify(current_file, ":t:r")
     local file_path = vim.fn.expand('%:p')
     local project_root = M.find_project_root()
+    local original_win = vim.api.nvim_get_current_win()
+    local original_cursor_pos = vim.api.nvim_win_get_cursor(original_win)
+    local current_line_nr = original_cursor_pos[1]
+
     -- local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
     local compile_cmd
     -- if has_makefile then
@@ -103,9 +127,10 @@ function M.disenchant()
     local objdump_cmd = string.format('cd %s && objdump -d -Sl --source-comment --no-show-raw-insn %s.o', project_root, file_name)
     local objdump_result = vim.fn.system(objdump_cmd)
     local asm_buf, asm_win = M.create_asm_buf(file_name, objdump_result)
-        end
-    end
+    local target_line = M.search_target_line(current_file, current_line_nr, asm_buf)
 
+    vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
+    vim.cmd('normal! zz')
 end
 
 function M.read_file(file_path)
