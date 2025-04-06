@@ -112,18 +112,18 @@ function M.disenchant()
     local current_line_nr = original_cursor_pos[1]
     local ft = vim.bo[current_buf_num].filetype
 
-    -- local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
+    local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
     local compile_cmd
     if ft == 'c' or ft == 'cpp' then
-        compile_cmd = string.format('cd %s && gcc -g3 -c %s -o %s.o', project_root, file_path, file_name)
+        if has_makefile then
+            compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
+        else
+            compile_cmd = string.format('cd %s && gcc -g3 -c %s -o %s.o', project_root, file_path, file_name)
+        end
     else
         vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
         return
     end
-    -- if has_makefile then
-    --     compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
-    -- else
-    -- end
 
     local compile_result = vim.fn.system(compile_cmd)
     if vim.v.shell_error ~= 0 then
