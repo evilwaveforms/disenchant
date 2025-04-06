@@ -124,7 +124,7 @@ function M.disenchant()
         return
     end
 
-    local objdump_cmd = string.format('cd %s && objdump -d -Sl --source-comment --no-show-raw-insn %s.o', project_root, file_name)
+    local objdump_cmd = string.format('cd %s && objdump -Sl -Mintel --source-comment --no-show-raw-insn -d %s.o', project_root, file_name)
     local objdump_result = vim.fn.system(objdump_cmd)
     local asm_buf, asm_win = M.create_asm_buf(file_name, objdump_result)
     local target_line = M.search_target_line(current_file, current_line_nr, asm_buf)
