@@ -64,7 +64,7 @@ function M.create_asm_buf(file_name, objdump_result)
             vim.api.nvim_buf_delete(buf, { force = true })
         end
     end
-    vim.cmd("vnew")
+    vim.cmd("rightbelow vnew")
     local asm_buf_num = vim.api.nvim_get_current_buf()
     local asm_win = vim.api.nvim_get_current_win()
     vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", true)
