@@ -27,9 +27,9 @@ end
 function M.setup(opts)
   opts = opts or {}
   if vim.tbl_deep_extend then
-     config = vim.tbl_deep_extend('force', config, opts)
+    config = vim.tbl_deep_extend('force', config, opts)
   else
-     config = deep_extend(config, opts)
+    config = deep_extend(config, opts)
   end
 
   for action_name, _ in pairs(default_config.keymap) do
@@ -61,41 +61,41 @@ function M.find_project_root()
 end
 
 function M.create_asm_buf(file_name, objdump_result)
-    -- Delete if already exists.
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.fn.bufname(buf) == "disenchant-" .. file_name then
-            vim.api.nvim_buf_delete(buf, { force = true })
-        end
+  -- Delete if already exists.
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.fn.bufname(buf) == "disenchant-" .. file_name then
+      vim.api.nvim_buf_delete(buf, { force = true })
     end
-    vim.cmd("rightbelow vnew")
-    local asm_buf_num = vim.api.nvim_get_current_buf()
-    local asm_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", true)
-    vim.api.nvim_buf_set_option(asm_buf_num,  "buftype", "nofile")
-    vim.api.nvim_buf_set_name(asm_buf_num, "disenchant-" .. file_name)
-    vim.api.nvim_buf_set_lines(asm_buf_num, 0, -1, false, vim.split(objdump_result, '\n'))
-    vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", false)
-    return asm_buf_num, asm_win
+  end
+  vim.cmd("rightbelow vnew")
+  local asm_buf_num = vim.api.nvim_get_current_buf()
+  local asm_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", true)
+  vim.api.nvim_buf_set_option(asm_buf_num,  "buftype", "nofile")
+  vim.api.nvim_buf_set_name(asm_buf_num, "disenchant-" .. file_name)
+  vim.api.nvim_buf_set_lines(asm_buf_num, 0, -1, false, vim.split(objdump_result, '\n'))
+  vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", false)
+  return asm_buf_num, asm_win
 end
 
 function M.search_target_line(current_file, current_line_nr, asm_buf)
-    local target_line = 1
-    --  Pattern for source line marker. e.g. /path/to/your/source.c:666
-    local search_pattern = string.format('^%s:%d', vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
-    local search_result = vim.fn.searchpos(search_pattern, 'nW')
-    if search_result[1] > 0 then
-        local instruction_pattern = '^\\s*[0-9a-fA-F]+:'
-        local start_line_for_instr_search = search_result[1]
-        local next_instr_line = vim.fn.search(instruction_pattern, 'nW', start_line_for_instr_search)
-        if next_instr_line > 0 then
-            target_line = next_instr_line
-        else
-            target_line = search_result[1] + 1
-            local line_count = vim.api.nvim_buf_line_count(asm_buf)
-            target_line = math.min(target_line, line_count)
-        end
+  local target_line = 1
+  --  Pattern for source line marker. e.g. /path/to/your/source.c:666
+  local search_pattern = string.format('^%s:%d', vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
+  local search_result = vim.fn.searchpos(search_pattern, 'nW')
+  if search_result[1] > 0 then
+    local instruction_pattern = '^\\s*[0-9a-fA-F]+:'
+    local start_line_for_instr_search = search_result[1]
+    local next_instr_line = vim.fn.search(instruction_pattern, 'nW', start_line_for_instr_search)
+    if next_instr_line > 0 then
+      target_line = next_instr_line
+    else
+      target_line = search_result[1] + 1
+      local line_count = vim.api.nvim_buf_line_count(asm_buf)
+      target_line = math.min(target_line, line_count)
     end
-    return target_line
+  end
+  return target_line
 end
 
 function M.disenchant()
@@ -146,16 +146,16 @@ function M.disenchant()
 end
 
 function M.read_file(file_path)
-    local f = io.open(file_path, "r")
-    if not f then return nil end
+  local f = io.open(file_path, "r")
+  if not f then return nil end
 
-    local lines = {}
-    for line in f:lines() do
-        table.insert(lines, line)
-    end
+  local lines = {}
+  for line in f:lines() do
+    table.insert(lines, line)
+  end
 
-    f:close()
-    return lines
+  f:close()
+  return lines
 end
 
 return M
