@@ -114,21 +114,22 @@ function M.disenchant()
   local original_cursor_pos = vim.api.nvim_win_get_cursor(original_win)
   local current_line_nr = original_cursor_pos[1]
   local ft = vim.bo[current_buf_num].filetype
-
   local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
   local compile_cmd
-  if ft == 'c' or ft == 'cpp' then
-    if has_makefile then
-      compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
-    else if ft == 'c' then
-        compile_cmd = string.format(config.compile_command_c, project_root, file_path, file_name)
-      else
-        compile_cmd = string.format(config.compile_command_cpp, project_root, file_path, file_name)
-      end
-    end
-  else
+
+  if ft ~= 'c' and ft ~= 'cpp' then
     vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
     return
+  end
+
+  if has_makefile then
+    compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
+  else
+    local compile_commands = {
+      c = config.compile_command_c,
+      cpp = config.compile_command_cpp,
+    }
+    compile_cmd = string.format(compile_commands[ft], project_root, file_path, file_name)
   end
 
   local compile_result = vim.fn.system(compile_cmd)
@@ -141,7 +142,6 @@ function M.disenchant()
   local objdump_result = vim.fn.system(objdump_cmd)
   local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
   local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
-
   vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
 end
 
