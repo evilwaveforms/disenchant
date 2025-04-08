@@ -3,7 +3,10 @@
 local M = {}
 
 local default_config = {
-  keymap = { disassemble = "<leader>od", }
+  keymap = { disassemble = "<leader>od", },
+  compile_command_c = 'cd %s && gcc -g3 -c %s -o %s.o',
+  compile_command_cpp = 'cd %s && g++ -g3 -c %s -o %s.o',
+  objdump_command = 'cd %s && objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s.o',
 }
 
 local action_funcs = { disassemble = function() M.disenchant() end, }
@@ -96,47 +99,50 @@ function M.search_target_line(current_file, current_line_nr, asm_buf)
 end
 
 function M.disenchant()
-    local current_buf_num = vim.api.nvim_get_current_buf()
-    local current_file_path = vim.api.nvim_buf_get_name(current_buf_num)
-    if not current_file_path or current_file_path == "" then
-        print("NO FILE IS CURRENTLY OPEN")
-        return
+  local current_buf_num = vim.api.nvim_get_current_buf()
+  local current_file_path = vim.api.nvim_buf_get_name(current_buf_num)
+  if not current_file_path or current_file_path == "" then
+    print("NO FILE IS CURRENTLY OPEN")
+    return
+  end
+
+  -- file name without extension
+  local file_name = vim.fn.fnamemodify(current_file_path, ":t:r")
+  local file_path = vim.fn.expand('%:p')
+  local project_root = M.find_project_root()
+  local original_win = vim.api.nvim_get_current_win()
+  local original_cursor_pos = vim.api.nvim_win_get_cursor(original_win)
+  local current_line_nr = original_cursor_pos[1]
+  local ft = vim.bo[current_buf_num].filetype
+
+  local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
+  local compile_cmd
+  if ft == 'c' or ft == 'cpp' then
+    if has_makefile then
+      compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
+    else if ft == 'c' then
+        compile_cmd = string.format(config.compile_command_c, project_root, file_path, file_name)
+      else
+        compile_cmd = string.format(config.compile_command_cpp, project_root, file_path, file_name)
+      end
     end
+  else
+    vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
+    return
+  end
 
-    -- file name without extension
-    local file_name = vim.fn.fnamemodify(current_file_path, ":t:r")
-    local file_path = vim.fn.expand('%:p')
-    local project_root = M.find_project_root()
-    local original_win = vim.api.nvim_get_current_win()
-    local original_cursor_pos = vim.api.nvim_win_get_cursor(original_win)
-    local current_line_nr = original_cursor_pos[1]
-    local ft = vim.bo[current_buf_num].filetype
+  local compile_result = vim.fn.system(compile_cmd)
+  if vim.v.shell_error ~= 0 then
+    print("COMPILATION FAILED: " .. compile_result)
+    return
+  end
 
-    local has_makefile = vim.fn.filereadable(project_root .. '/Makefile') == 1
-    local compile_cmd
-    if ft == 'c' or ft == 'cpp' then
-        if has_makefile then
-            compile_cmd = string.format('cd %s && make %s.o', project_root, file_name)
-        else
-            compile_cmd = string.format('cd %s && gcc -g3 -c %s -o %s.o', project_root, file_path, file_name)
-        end
-    else
-        vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
-        return
-    end
+  local objdump_cmd = string.format(config.objdump_command, project_root, file_name)
+  local objdump_result = vim.fn.system(objdump_cmd)
+  local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
+  local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
 
-    local compile_result = vim.fn.system(compile_cmd)
-    if vim.v.shell_error ~= 0 then
-        print("COMPILATION FAILED: " .. compile_result)
-        return
-    end
-
-    local objdump_cmd = string.format('cd %s && objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s.o', project_root, file_name)
-    local objdump_result = vim.fn.system(objdump_cmd)
-    local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
-    local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
-
-    vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
+  vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
 end
 
 function M.read_file(file_path)
