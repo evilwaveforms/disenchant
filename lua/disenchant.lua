@@ -146,17 +146,4 @@ function M.disenchant()
   vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
 end
 
-function M.read_file(file_path)
-  local f = io.open(file_path, "r")
-  if not f then return nil end
-
-  local lines = {}
-  for line in f:lines() do
-    table.insert(lines, line)
-  end
-
-  f:close()
-  return lines
-end
-
 return M
