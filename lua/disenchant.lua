@@ -142,6 +142,7 @@ function M.disenchant()
   local objdump_result = vim.fn.system(objdump_cmd)
   local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
   local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
+  vim.api.nvim_set_current_win(original_win)
   vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
 end
 
