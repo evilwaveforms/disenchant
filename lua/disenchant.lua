@@ -8,7 +8,6 @@ local default_config = {
   compile_command_cpp = 'g++ -g3 -c %s -o %s.o',
   objdump_command = 'objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s',
 }
-
 local action_funcs = { disassemble = function() M.disenchant() end, }
 local action_descs = { disassemble = "disenchant: DISASSEMBLE OBJECT FILE", }
 local config = vim.deepcopy(default_config)
@@ -27,7 +26,6 @@ end
 function M.setup(opts)
   opts = opts or {}
   config = deep_extend(config, opts)
-
   for action_name, _ in pairs(default_config.keymap) do
     local keybind_to_set = config.keymap and config.keymap[action_name]
     if type(keybind_to_set) == "string" and keybind_to_set ~= "" then
@@ -176,7 +174,7 @@ function M.disenchant()
   local current_buf_num = vim.api.nvim_get_current_buf()
   local current_file_path = vim.api.nvim_buf_get_name(current_buf_num)
   if not current_file_path or current_file_path == "" then
-    print("NO FILE IS CURRENTLY OPEN")
+    vim.notify("NO FILE IS CURRENTLY OPEN")
     return
   end
 
@@ -199,21 +197,18 @@ function M.disenchant()
   local compile_info = M.get_compile_info_from_json(project_root, current_file_path)
 
   if compile_info then
-    vim.notify("USING compile_commands.json", vim.log.levels.INFO)
     compile_cmd = compile_info.command
     obj_file_path = compile_info.output_file
     cd_dir = compile_info.directory
   else
     local makefile_path = project_root .. '/Makefile'
     if vim.fn.filereadable(makefile_path) == 1 then
-      vim.notify("USING Makefile", vim.log.levels.INFO)
       local target_obj = file_name .. '.o'
       target_obj = vim.fn.shellescape(target_obj)
       compile_cmd = string.format('make %s', target_obj)
       obj_file_path = project_root .. '/' .. file_name .. '.o'
       cd_dir = project_root
     else
-      vim.notify("FALLBACK", vim.log.levels.INFO)
       local compile_commands = {
         c = config.compile_command_c,
         cpp = config.compile_command_cpp,
