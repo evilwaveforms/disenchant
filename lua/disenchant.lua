@@ -4,8 +4,8 @@ local M = {}
 
 local default_config = {
   keymap = { disassemble = "<leader>od", },
-  compile_command_c = 'gcc -g3 -c %s -o %s.o',
-  compile_command_cpp = 'g++ -g3 -c %s -o %s.o',
+  compile_command_c = 'gcc -g3 -c %s -o %s',
+  compile_command_cpp = 'g++ -g3 -c %s -o %s',
   objdump_command = 'objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s',
 }
 local action_funcs = { disassemble = function() M.disenchant() end, }
@@ -216,9 +216,6 @@ function M.disenchant()
       obj_file_path = project_root .. '/' .. file_name .. '.o'
       compile_cmd = string.format(compile_commands[ft], current_file_path, obj_file_path)
       cd_dir = project_root
-      local relative_obj_path = file_name .. '.o'
-      compile_cmd = string.format(compile_commands[ft]:gsub("^cd %%s && ", ""), current_file_path, relative_obj_path)
-      obj_file_path = cd_dir .. '/' .. relative_obj_path
     end
   end
 
