@@ -8,6 +8,8 @@ method is chosen based on the following order of precedence:
 
 `compile_commands.json` > `Makefile` > direct gcc/g++ invocation
 
+Object file is then passed to objdump after which the asm is shown on split window.
+
 ## installation & configuration
 
 ### lazy.nvim
