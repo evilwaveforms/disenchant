@@ -61,9 +61,9 @@ local function is_absolute_path(path)
 end
 
 local function shell_quote_arg(arg)
-    if string.match(arg, "[^a-zA-Z0-9_@%+=:,./-]") then
-        return "'" .. string.gsub(arg, "'", "'\\''") .. "'"
-    else return arg end
+  if string.match(arg, "[^a-zA-Z0-9_@%+=:,./-]") then
+    return "'" .. string.gsub(arg, "'", "'\\''") .. "'"
+  else return arg end
 end
 
 function M.get_compile_info_from_json(project_root, current_file_path)
@@ -87,9 +87,9 @@ function M.get_compile_info_from_json(project_root, current_file_path)
 
     local entry_file = entry.file
     if not is_absolute_path(entry_file) then
-       entry_file = vim.fn.simplify(entry.directory .. '/' .. entry.file)
+      entry_file = vim.fn.simplify(entry.directory .. '/' .. entry.file)
     else
-       entry_file = vim.fn.simplify(entry_file)
+      entry_file = vim.fn.simplify(entry_file)
     end
 
     if entry_file == current_abs_path then
@@ -98,24 +98,24 @@ function M.get_compile_info_from_json(project_root, current_file_path)
       local output_file_path = nil
 
       if entry.command and type(entry.command) == "string" then
-          command_str = entry.command
+        command_str = entry.command
       elseif entry.arguments and type(entry.arguments) == "table" then
-          local args_quoted = {}
-          for _, arg in ipairs(entry.arguments) do
-              table.insert(args_quoted, shell_quote_arg(arg))
-          end
-          command_str = table.concat(args_quoted, " ")
+        local args_quoted = {}
+        for _, arg in ipairs(entry.arguments) do
+          table.insert(args_quoted, shell_quote_arg(arg))
+        end
+        command_str = table.concat(args_quoted, " ")
       else
-          vim.notify("SKIPPING ENTRY FOR " .. entry_file .. ": MISSING OR INVALID 'command'/'arguments' FIELD.", vim.log.levels.WARN)
-          return nil
+        vim.notify("SKIPPING ENTRY FOR " .. entry_file .. ": MISSING OR INVALID 'command'/'arguments' FIELD.", vim.log.levels.WARN)
+        return nil
       end
 
       if entry.output and type(entry.output) == "string" then
-          if not is_absolute_path(entry.output) then
-              output_file_path = vim.fn.simplify(directory .. '/' .. entry.output)
-          else
-              output_file_path = vim.fn.simplify(entry.output)
-          end
+        if not is_absolute_path(entry.output) then
+          output_file_path = vim.fn.simplify(directory .. '/' .. entry.output)
+        else
+          output_file_path = vim.fn.simplify(entry.output)
+        end
       else
         return nil
       end
@@ -228,12 +228,12 @@ function M.disenchant()
     return
   end
   if not obj_file_path or type(obj_file_path) ~= "string" or obj_file_path == "" then
-      vim.notify("ERROR: INVALID OBJECT FILE PATH BEFORE objdump. PATH: " .. vim.inspect(obj_file_path), vim.log.levels.ERROR)
-      return
+    vim.notify("ERROR: INVALID OBJECT FILE PATH BEFORE objdump. PATH: " .. vim.inspect(obj_file_path), vim.log.levels.ERROR)
+    return
   end
   if vim.fn.filereadable(obj_file_path) == 0 then
-      vim.notify("ERROR: OBJECT FILE MISSING BEFORE objdump: " .. obj_file_path, vim.log.levels.ERROR)
-      return
+    vim.notify("ERROR: OBJECT FILE MISSING BEFORE objdump: " .. obj_file_path, vim.log.levels.ERROR)
+    return
   end
 
   local objdump_cmd = string.format(config.objdump_command, obj_file_path)
