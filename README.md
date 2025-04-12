@@ -21,9 +21,9 @@ Values inside `opts` are defaults. If you don't want to change them, opts can be
             keymap = {
                 disassemble = "<leader>om",
             },
-            compile_command_c = 'cd %s && gcc -g3 -c %s -o %s.o',
-            compile_command_cpp = 'cd %s && g++ -g3 -c %s -o %s.o',
-            objdump_command = 'cd %s && objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s.o',
+            compile_command_c = 'gcc -g3 -c %s -o %s.o',
+            compile_command_cpp = 'g++ -g3 -c %s -o %s.o',
+            objdump_command = 'objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s',
         },
     },
 ```
