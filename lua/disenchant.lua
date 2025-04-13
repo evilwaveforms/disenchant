@@ -4,9 +4,9 @@ local M = {}
 
 local default_config = {
   keymap = { disassemble = "<leader>od", },
-  compile_command_c = 'gcc -g3 -c %s -o %s',
-  compile_command_cpp = 'g++ -g3 -c %s -o %s',
-  objdump_command = 'objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s',
+  compile_command_c = "gcc -g3 -c %s -o %s",
+  compile_command_cpp = "g++ -g3 -c %s -o %s",
+  objdump_command = "objdump -Sl --demangle -Mintel --source-comment --no-show-raw-insn -d %s",
 }
 local action_funcs = { disassemble = function() M.disenchant() end, }
 local action_descs = { disassemble = "disenchant: DISASSEMBLE OBJECT FILE", }
@@ -39,8 +39,8 @@ function M.setup(opts)
 end
 
 function M.find_project_root()
-  local markers = {'compile_commands.json', 'Makefile', '.git'}
-  local path = vim.fn.expand('%:p:h')
+  local markers = {"compile_commands.json", "Makefile", ".git"}
+  local path = vim.fn.expand("%:p:h")
   local root = path
   while root ~= '/' do
     for _, marker in ipairs(markers) do
@@ -49,7 +49,7 @@ function M.find_project_root()
         return root
       end
     end
-    root = vim.fn.fnamemodify(root, ':h')
+    root = vim.fn.fnamemodify(root, ":h")
   end
   return path
 end
@@ -74,7 +74,7 @@ function M.get_compile_info_from_json(project_root, current_file_path)
 
   local content = table.concat(vim.fn.readfile(compile_commands_path), "\n")
   local ok, commands_data = pcall(vim.fn.json_decode, content)
-  if not ok or type(commands_data) ~= 'table' then
+  if not ok or type(commands_data) ~= "table" then
     vim.notify("FAILED TO PARSE compile_commands.json: " .. (commands_data or "DECODE ERROR"), vim.log.levels.WARN)
     return nil
   end
@@ -113,12 +113,8 @@ function M.get_compile_info_from_json(project_root, current_file_path)
       if entry.output and type(entry.output) == "string" then
         if not is_absolute_path(entry.output) then
           output_file_path = vim.fn.simplify(directory .. '/' .. entry.output)
-        else
-          output_file_path = vim.fn.simplify(entry.output)
-        end
-      else
-        return nil
-      end
+        else output_file_path = vim.fn.simplify(entry.output) end
+      else return nil end
 
       return {
         command = command_str,
@@ -153,12 +149,12 @@ end
 function M.search_target_line(current_file, current_line_nr, asm_buf)
   local target_line = 1
   --  Pattern for source line marker. e.g. /path/to/your/source.c:666
-  local search_pattern = string.format('^%s:%d', vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
-  local search_result = vim.fn.searchpos(search_pattern, 'nW')
+  local search_pattern = string.format("^%s:%d", vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
+  local search_result = vim.fn.searchpos(search_pattern, "nW")
   if search_result[1] > 0 then
-    local instruction_pattern = '^\\s*[0-9a-fA-F]+:'
+    local instruction_pattern = "^\\s*[0-9a-fA-F]+:"
     local start_line_for_instr_search = search_result[1]
-    local next_instr_line = vim.fn.search(instruction_pattern, 'nW', start_line_for_instr_search)
+    local next_instr_line = vim.fn.search(instruction_pattern, "nW", start_line_for_instr_search)
     if next_instr_line > 0 then
       target_line = next_instr_line
     else
@@ -187,7 +183,7 @@ function M.disenchant()
   local ft = vim.bo[current_buf_num].filetype
   local compile_cmd
 
-  if ft ~= 'c' and ft ~= 'cpp' then
+  if ft ~= 'c' and ft ~= "cpp" then
     vim.notify("UNSUPPORTED FILETYPE: " .. ft, vim.log.levels.ERROR)
     return
   end
@@ -201,19 +197,19 @@ function M.disenchant()
     obj_file_path = compile_info.output_file
     cd_dir = compile_info.directory
   else
-    local makefile_path = project_root .. '/Makefile'
+    local makefile_path = project_root .. "/Makefile"
     if vim.fn.filereadable(makefile_path) == 1 then
-      local target_obj = file_name .. '.o'
+      local target_obj = file_name .. ".o"
       target_obj = vim.fn.shellescape(target_obj)
-      compile_cmd = string.format('make %s', target_obj)
-      obj_file_path = project_root .. '/' .. file_name .. '.o'
+      compile_cmd = string.format("make %s", target_obj)
+      obj_file_path = project_root .. '/' .. file_name .. ".o"
       cd_dir = project_root
     else
       local compile_commands = {
         c = config.compile_command_c,
         cpp = config.compile_command_cpp,
       }
-      obj_file_path = project_root .. '/' .. file_name .. '.o'
+      obj_file_path = project_root .. '/' .. file_name .. ".o"
       compile_cmd = string.format(compile_commands[ft], current_file_path, obj_file_path)
       cd_dir = project_root
     end
@@ -234,7 +230,7 @@ function M.disenchant()
   end
 
   local objdump_cmd = string.format(config.objdump_command, obj_file_path)
-  local objdump_result = vim.fn.system(string.format('cd %s && %s', vim.fn.shellescape(cd_dir), objdump_cmd))
+  local objdump_result = vim.fn.system(string.format("cd %s && %s", vim.fn.shellescape(cd_dir), objdump_cmd))
   local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
   local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
   vim.api.nvim_set_current_win(original_win)
