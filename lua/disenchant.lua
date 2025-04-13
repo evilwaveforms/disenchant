@@ -142,6 +142,7 @@ function M.create_asm_buf(file_name, objdump_result)
   vim.api.nvim_buf_set_option(asm_buf_num,  "buftype", "nofile")
   vim.api.nvim_buf_set_name(asm_buf_num, "disenchant-" .. file_name)
   vim.api.nvim_buf_set_lines(asm_buf_num, 0, -1, false, vim.split(objdump_result, '\n'))
+  vim.api.nvim_buf_set_option(asm_buf_num, "filetype", "objdump")
   vim.api.nvim_buf_set_option(asm_buf_num, "modifiable", false)
   return asm_buf_num, asm_win
 end
