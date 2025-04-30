@@ -203,7 +203,7 @@ function M.disenchant()
       local target_obj = file_name .. ".o"
       target_obj = vim.fn.shellescape(target_obj)
       compile_cmd = string.format("make %s", target_obj)
-      obj_file_path = project_root .. '/' .. file_name .. ".o"
+      obj_file_path = project_root .. '/build/' .. file_name .. ".o"
       cd_dir = project_root
     else
       local compile_commands = {
