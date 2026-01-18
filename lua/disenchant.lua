@@ -147,19 +147,33 @@ function M.create_asm_buf(file_name, objdump_result)
   return asm_buf_num, asm_win
 end
 
-function M.search_target_line(current_file, current_line_nr, asm_buf)
+function M.search_target_line(current_file, current_line_nr, asm_buf, source_line_text)
   local target_line = 1
+  local found_line = 0
   --  Pattern for source line marker. e.g. /path/to/your/source.c:666
   local search_pattern = string.format("^%s:%d", vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
   local search_result = vim.fn.searchpos(search_pattern, "nW")
   if search_result[1] > 0 then
+    found_line = search_result[1]
+  elseif source_line_text and source_line_text ~= "" then
+    -- As fallback, search for the actual source line text.
+    local trimmed = source_line_text:match("^%s*(.-)%s*$")
+    if trimmed and trimmed ~= "" then
+      local escaped = vim.fn.escape(trimmed, [[\]^$.*~]])
+      local text_result = vim.fn.searchpos(escaped, "nW")
+      if text_result[1] > 0 then
+        found_line = text_result[1]
+      end
+    end
+  end
+
+  if found_line > 0 then
     local instruction_pattern = "^\\s*[0-9a-fA-F]+:"
-    local start_line_for_instr_search = search_result[1]
-    local next_instr_line = vim.fn.search(instruction_pattern, "nW", start_line_for_instr_search)
+    local next_instr_line = vim.fn.search(instruction_pattern, "nW", found_line)
     if next_instr_line > 0 then
       target_line = next_instr_line
     else
-      target_line = search_result[1] + 1
+      target_line = found_line + 1
       local line_count = vim.api.nvim_buf_line_count(asm_buf)
       target_line = math.min(target_line, line_count)
     end
@@ -233,7 +247,8 @@ function M.disenchant()
   local objdump_cmd = string.format(config.objdump_command, obj_file_path)
   local objdump_result = vim.fn.system(string.format("cd %s && %s", vim.fn.shellescape(cd_dir), objdump_cmd))
   local asm_buf_num, asm_win = M.create_asm_buf(file_name, objdump_result)
-  local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num)
+  local source_line_text = vim.api.nvim_buf_get_lines(current_buf_num, current_line_nr - 1, current_line_nr, false)[1]
+  local target_line = M.search_target_line(current_file_path, current_line_nr, asm_buf_num, source_line_text)
   vim.api.nvim_set_current_win(original_win)
   vim.api.nvim_win_set_cursor(asm_win, {target_line, 1})
 end
