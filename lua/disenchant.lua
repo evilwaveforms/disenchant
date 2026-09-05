@@ -385,7 +385,6 @@ local function disassemble_standalone_rust(current_file_path)
       shell_quote_arg(current_file_path),
       shell_quote_arg(obj_file_path)
     )
-    print("compiling with rustc")
     local objdump_result, compile_error = compile_and_objdump(
       compile_cmd,
       vim.fn.fnamemodify(current_file_path, ":h"),
@@ -434,7 +433,6 @@ local function disassemble_cargo_build_script(manifest_path, package, current_fi
   end
   table.insert(parts, "--message-format=json")
 
-  print("compiling with cargo build script " .. package.name)
   local build_result, exit_code = run_command(table.concat(parts, " "), package_directory)
   if exit_code ~= 0 then
     return nil, "COMPILATION FAILED: " .. build_result
@@ -494,7 +492,6 @@ local function disassemble_rust(current_file_path)
       obj_file_path,
       dependency_file_path
     )
-    print("compiling with cargo target " .. target.name)
     local objdump_result, compile_error, dependency_info = compile_and_objdump(
       compile_cmd,
       package_directory,
@@ -622,7 +619,6 @@ function M.disenchant()
       compile_cmd = compile_info.command
       obj_file_path = compile_info.output_file
       cd_dir = compile_info.directory
-      print("compiling with compile info")
     else
       local makefile_path = project_root .. "/Makefile"
       if vim.fn.filereadable(makefile_path) == 1 then
@@ -631,7 +627,6 @@ function M.disenchant()
         compile_cmd = string.format("make %s", target_obj)
         obj_file_path = project_root .. '/build/' .. file_name .. ".o"
         cd_dir = project_root
-        print("compiling with makefile")
       else
         local compile_commands = {
           c = config.compile_command_c,
@@ -644,7 +639,6 @@ function M.disenchant()
           shell_quote_arg(obj_file_path)
         )
         cd_dir = project_root
-        print("compiling with gcc")
       end
     end
 
