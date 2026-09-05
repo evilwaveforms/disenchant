@@ -478,6 +478,9 @@ local function disassemble_rust(current_file_path)
 
   local package, metadata_error = get_cargo_package(manifest_path, current_file_path)
   if metadata_error then
+    if metadata_error:match("^NO CARGO PACKAGE FOUND") then
+      return disassemble_standalone_rust(current_file_path)
+    end
     return nil, metadata_error
   end
   for _, target in ipairs(package.targets or {}) do
