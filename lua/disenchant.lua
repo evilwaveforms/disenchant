@@ -234,8 +234,20 @@ local function get_cargo_package(manifest_path, current_file_path)
   end
 
   local ok, metadata = pcall(vim.fn.json_decode, result)
-  if not ok or type(metadata) ~= "table" then
-    return nil, "FAILED TO PARSE CARGO METADATA: " .. (metadata or "DECODE ERROR")
+  if not ok or type(metadata) ~= "table" or type(metadata.packages) ~= "table" then
+    local parsed_metadata
+    for line in result:gmatch("[^\r\n]+") do
+      local line_ok, line_metadata = pcall(vim.fn.json_decode, line)
+      if line_ok and type(line_metadata) == "table" and type(line_metadata.packages) == "table" then
+        parsed_metadata = line_metadata
+        break
+      end
+    end
+    if parsed_metadata then
+      metadata = parsed_metadata
+    else
+      return nil, "FAILED TO PARSE CARGO METADATA: " .. (ok and "DECODE ERROR" or tostring(metadata))
+    end
   end
 
   local manifest = normalized_path(manifest_path)
