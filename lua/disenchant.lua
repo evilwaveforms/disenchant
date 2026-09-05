@@ -47,7 +47,7 @@ function M.setup(opts)
 end
 
 function M.find_project_root()
-  local markers = {"compile_commands.json", "Cargo.toml", "Makefile", ".git"}
+  local markers = {"compile_commands.json", "Makefile", ".git"}
   local path = vim.fn.expand("%:p:h")
   local root = path
   while root ~= '/' do
