@@ -14,6 +14,10 @@ local default_config = {
 }
 local action_funcs = { disassemble = function() M.disenchant() end, }
 local action_descs = { disassemble = "disenchant: DISASSEMBLE OBJECT FILE", }
+local objdump_fallback_commands = {
+  { "rust-objdump", "rust-objdump -Sl --demangle --no-show-raw-insn -d %s" },
+  { "llvm-objdump", "llvm-objdump -Sl --demangle -Mintel --no-show-raw-insn -d %s" },
+}
 local config = vim.deepcopy(default_config)
 
 local function deep_extend(target, source)
@@ -81,12 +85,6 @@ end
 local function normalized_path(path)
   local realpath = (vim.uv or vim.loop).fs_realpath(path)
   return vim.fn.simplify(realpath or path)
-end
-
-local function path_is_within(path, directory)
-  path = normalized_path(path)
-  directory = normalized_path(directory)
-  return path == directory or path:sub(1, #directory + 1) == directory .. "/"
 end
 
 local function find_file_upward(file_name, start_path)
@@ -163,149 +161,121 @@ function M.get_compile_info_from_json(project_root, current_file_path)
   return nil
 end
 
-local function table_contains(values, expected)
-  for _, value in ipairs(values or {}) do
-    if value == expected then
-      return true
-    end
-  end
-  return false
-end
-
 local function cargo_target_kind(target)
-  for _, kind in ipairs({ "lib", "proc-macro", "bin", "example", "test", "bench", "custom-build" }) do
-    if table_contains(target.kind, kind) then
-      return kind
-    end
+  local kind = target.kind and target.kind[1]
+  if kind and (kind == "proc-macro" or kind:match("lib$")) then
+    return "lib"
   end
-  for _, crate_type in ipairs(target.crate_types or {}) do
-    if table_contains({ "lib", "rlib", "dylib", "staticlib", "cdylib", "proc-macro" }, crate_type) then
-      return "lib"
-    end
-  end
-  return nil
+  return kind
 end
 
 local function cargo_target_selector(target)
   local kind = cargo_target_kind(target)
-  if kind == "custom-build" then
-    return nil
-  end
-  if kind == "lib" or kind == "proc-macro" then
+  if kind == "lib" then
     return "--lib"
   end
-  if kind then
+  if kind == "bin" or kind == "example" or kind == "test" or kind == "bench" then
     return string.format("--%s %s", kind, shell_quote_arg(target.name))
   end
   return nil
 end
 
-local function cargo_source_category(package_directory, current_file_path)
-  local prefix = normalized_path(package_directory) .. "/"
-  local current_path = normalized_path(current_file_path)
-  if current_path:sub(1, #prefix) ~= prefix then
+local function relative_path(path, directory)
+  local prefix = directory .. "/"
+  if path:sub(1, #prefix) ~= prefix then
     return nil
   end
-  local relative_path = current_path:sub(#prefix + 1)
-  if relative_path:match("^tests/") then return "test" end
-  if relative_path:match("^examples/") then return "example" end
-  if relative_path:match("^benches/") then return "bench" end
-  if relative_path:match("^src/bin/") then return "bin" end
-  if relative_path:match("^src/") then return "src" end
-  return nil
+  return path:sub(#prefix + 1)
 end
 
-local function cargo_target_score(target, package_directory, current_file_path)
-  local current_path = normalized_path(current_file_path)
+local function cargo_target_priority(target, current_path, package_source_directory, relative_source_path)
   local source_path = normalized_path(target.src_path)
+  if current_path == source_path then
+    return 0
+  end
+
   local source_directory = vim.fn.fnamemodify(source_path, ":h")
   local source_stem = vim.fn.fnamemodify(source_path, ":t:r")
-  local module_directory = source_directory .. "/" .. source_stem
-  local score = 0
-
-  if current_path == source_path then
-    score = score + 100000
-  end
-  if path_is_within(current_path, source_directory) then
-    score = score + 1000 + #source_directory
-  end
-  if path_is_within(current_path, module_directory) then
-    score = score + 2000 + #module_directory
+  local target_directory = source_stem == "main" and source_directory or source_directory .. "/" .. source_stem
+  if target_directory ~= package_source_directory
+      and relative_path(current_path, target_directory) then
+    return 1
   end
 
-  local category = cargo_source_category(package_directory, current_path)
   local kind = cargo_target_kind(target)
-  if category == kind then
-    score = score + 10000
-  elseif category == "src" and (kind == "lib" or kind == "proc-macro" or kind == "bin") then
-    score = score + 5000
+  local target_prefix = kind == "test" and "tests/"
+      or kind == "example" and "examples/"
+      or kind == "bench" and "benches/"
+  if target_prefix and relative_source_path:match("^" .. target_prefix) then
+    return 2
   end
-  if kind == "lib" or kind == "proc-macro" then
-    score = score + 100
+  if kind == "bin" and relative_source_path:match("^src/bin/") then
+    return 2
   end
-  return score
+  if kind == "lib" and relative_source_path:match("^src/") then
+    return 3
+  end
+  if kind == "bin" and relative_source_path:match("^src/") then
+    return 4
+  end
+  return 5
 end
 
-local function get_cargo_project(manifest_path, current_file_path)
+local function get_cargo_package(manifest_path, current_file_path)
   local manifest_directory = vim.fn.fnamemodify(manifest_path, ":h")
   local command = string.format(
-    "%s metadata --format-version 1 --no-deps --manifest-path %s",
+    "%s metadata --quiet --format-version 1 --no-deps --manifest-path %s",
     config.cargo_command,
     shell_quote_arg(manifest_path)
   )
   local result, exit_code = run_command(command, manifest_directory)
   if exit_code ~= 0 then
-    return nil, nil, "CARGO METADATA FAILED: " .. result
+    return nil, "CARGO METADATA FAILED: " .. result
   end
 
   local ok, metadata = pcall(vim.fn.json_decode, result)
   if not ok or type(metadata) ~= "table" then
-    return nil, nil, "FAILED TO PARSE CARGO METADATA: " .. (metadata or "DECODE ERROR")
+    return nil, "FAILED TO PARSE CARGO METADATA: " .. (metadata or "DECODE ERROR")
   end
 
-  local selected_package
-  local selected_score = -1
+  local manifest = normalized_path(manifest_path)
+  local current_path = normalized_path(current_file_path)
   for _, package in ipairs(metadata.packages or {}) do
-    local package_directory = vim.fn.fnamemodify(package.manifest_path, ":h")
-    local score = 0
-    if normalized_path(package.manifest_path) == normalized_path(manifest_path) then
-      score = score + 100000
+    if normalized_path(package.manifest_path) == manifest then
+      return package, nil
     end
-    if path_is_within(current_file_path, package_directory) then
-      score = score + #normalized_path(package_directory)
-    end
+  end
+  for _, package in ipairs(metadata.packages or {}) do
     for _, target in ipairs(package.targets or {}) do
-      if normalized_path(target.src_path) == normalized_path(current_file_path) then
-        score = score + 1000000
+      if normalized_path(target.src_path) == current_path then
+        return package, nil
       end
     end
-    if score > selected_score then
-      selected_package = package
-      selected_score = score
-    end
   end
-
-  if not selected_package then
-    return nil, nil, "NO CARGO PACKAGE FOUND FOR " .. current_file_path
-  end
-  return metadata, selected_package, nil
+  return nil, "NO CARGO PACKAGE FOUND FOR " .. current_file_path
 end
 
 local function get_cargo_targets(package, current_file_path)
-  local package_directory = vim.fn.fnamemodify(package.manifest_path, ":h")
+  local package_directory = normalized_path(vim.fn.fnamemodify(package.manifest_path, ":h"))
+  local current_path = normalized_path(current_file_path)
+  local source_path = relative_path(current_path, package_directory) or ""
   local targets = {}
   for _, target in ipairs(package.targets or {}) do
     if cargo_target_selector(target) then
+      target._disenchant_priority = cargo_target_priority(
+        target,
+        current_path,
+        package_directory .. "/src",
+        source_path
+      )
       table.insert(targets, target)
     end
   end
   table.sort(targets, function(left, right)
-    local left_score = cargo_target_score(left, package_directory, current_file_path)
-    local right_score = cargo_target_score(right, package_directory, current_file_path)
-    if left_score == right_score then
+    if left._disenchant_priority == right._disenchant_priority then
       return left.name < right.name
     end
-    return left_score > right_score
+    return left._disenchant_priority < right._disenchant_priority
   end)
   return targets
 end
@@ -326,19 +296,9 @@ local function objdump_object(obj_file_path, directory)
   end
 
   local errors = { objdump_error }
-  local fallback_commands = {
-    {
-      executable = "rust-objdump",
-      command = "rust-objdump -Sl --demangle --no-show-raw-insn -d %s",
-    },
-    {
-      executable = "llvm-objdump",
-      command = "llvm-objdump -Sl --demangle -Mintel --no-show-raw-insn -d %s",
-    },
-  }
-  for _, fallback in ipairs(fallback_commands) do
-    if vim.fn.executable(fallback.executable) == 1 then
-      result, objdump_error = run_objdump(fallback.command, obj_file_path, directory)
+  for _, fallback in ipairs(objdump_fallback_commands) do
+    if vim.fn.executable(fallback[1]) == 1 then
+      result, objdump_error = run_objdump(fallback[2], obj_file_path, directory)
       if result then
         return result, nil
       end
@@ -348,15 +308,15 @@ local function objdump_object(obj_file_path, directory)
   return nil, table.concat(errors, "\n")
 end
 
-local function compile_and_objdump(command, directory, obj_file_path, delete_object, dependency_file_path)
+local function compile_and_objdump(command, directory, obj_file_path, dependency_file_path)
   local compile_result, exit_code = run_command(command, directory)
   if exit_code ~= 0 then
-    if delete_object then vim.fn.delete(obj_file_path) end
+    vim.fn.delete(obj_file_path)
     if dependency_file_path then vim.fn.delete(dependency_file_path) end
     return nil, "COMPILATION FAILED: " .. compile_result
   end
   if vim.fn.filereadable(obj_file_path) == 0 then
-    if delete_object then vim.fn.delete(obj_file_path) end
+    vim.fn.delete(obj_file_path)
     if dependency_file_path then vim.fn.delete(dependency_file_path) end
     return nil, "OBJECT FILE MISSING BEFORE objdump: " .. obj_file_path
   end
@@ -366,22 +326,9 @@ local function compile_and_objdump(command, directory, obj_file_path, delete_obj
     dependency_info = table.concat(vim.fn.readfile(dependency_file_path), "\n")
   end
   local objdump_result, objdump_error = objdump_object(obj_file_path, directory)
-  if delete_object then vim.fn.delete(obj_file_path) end
+  vim.fn.delete(obj_file_path)
   if dependency_file_path then vim.fn.delete(dependency_file_path) end
   return objdump_result, objdump_error, dependency_info
-end
-
-local function objdump_contains_source(objdump_result, current_file_path, package_directory)
-  local current_path = normalized_path(current_file_path)
-  if objdump_result:find(current_path .. ":", 1, true) then
-    return true
-  end
-  local package_path = normalized_path(package_directory)
-  if path_is_within(current_path, package_path) then
-    local relative_path = current_path:sub(#package_path + 2)
-    return objdump_result:find(relative_path .. ":", 1, true) ~= nil
-  end
-  return false
 end
 
 local function dependency_info_contains_source(dependency_info, current_file_path, package_directory)
@@ -393,12 +340,8 @@ local function dependency_info_contains_source(dependency_info, current_file_pat
   if dependency_info:find(current_path, 1, true) then
     return true
   end
-  local package_path = normalized_path(package_directory)
-  if path_is_within(current_path, package_path) then
-    local relative_path = current_path:sub(#package_path + 2)
-    return dependency_info:find(relative_path, 1, true) ~= nil
-  end
-  return false
+  local source_path = relative_path(current_path, normalized_path(package_directory))
+  return source_path and dependency_info:find(source_path, 1, true) ~= nil
 end
 
 local function cargo_compile_command(manifest_path, package, target, obj_file_path, dependency_file_path)
@@ -446,8 +389,7 @@ local function disassemble_standalone_rust(current_file_path)
     local objdump_result, compile_error = compile_and_objdump(
       compile_cmd,
       vim.fn.fnamemodify(current_file_path, ":h"),
-      obj_file_path,
-      true
+      obj_file_path
     )
     if objdump_result then
       return objdump_result, nil
@@ -524,7 +466,7 @@ local function disassemble_rust(current_file_path)
     return disassemble_standalone_rust(current_file_path)
   end
 
-  local _, package, metadata_error = get_cargo_project(manifest_path, current_file_path)
+  local package, metadata_error = get_cargo_package(manifest_path, current_file_path)
   if metadata_error then
     return nil, metadata_error
   end
@@ -541,6 +483,7 @@ local function disassemble_rust(current_file_path)
 
   local package_directory = vim.fn.fnamemodify(package.manifest_path, ":h")
   local errors = {}
+  local cargo_compile_failed = false
   for _, target in ipairs(targets) do
     local obj_file_path = vim.fn.tempname() .. ".o"
     local dependency_file_path = vim.fn.tempname() .. ".d"
@@ -556,19 +499,21 @@ local function disassemble_rust(current_file_path)
       compile_cmd,
       package_directory,
       obj_file_path,
-      true,
       dependency_file_path
     )
     if objdump_result then
-      if dependency_info_contains_source(dependency_info, current_file_path, package_directory)
-          or objdump_contains_source(objdump_result, current_file_path, package_directory) then
+      if dependency_info_contains_source(dependency_info, current_file_path, package_directory) then
         return objdump_result, nil
       end
     else
+      cargo_compile_failed = true
       table.insert(errors, target.name .. ": " .. compile_error)
     end
   end
 
+  if cargo_compile_failed then
+    return nil, table.concat(errors, "\n")
+  end
   local standalone_result, standalone_error = disassemble_standalone_rust(current_file_path)
   if standalone_result then
     return standalone_result, nil
