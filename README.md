@@ -13,7 +13,9 @@ detected through `cargo metadata`, including library, binary, example, integrati
 proc-macro, and build script targets. Required target features are enabled automatically. Standalone
 Rust files are compiled directly with `rustc`.
 
-The compiled artifact is passed to objdump, after which the asm is shown in a split window.
+The compiled artifact is passed to the configured `objdump`. If it cannot disassemble the artifact,
+the plugin falls back to `rust-objdump` or `llvm-objdump` when either is available. The asm is then
+shown in a split window.
 
 ## installation & configuration
 

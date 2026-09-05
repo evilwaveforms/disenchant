@@ -310,13 +310,42 @@ local function get_cargo_targets(package, current_file_path)
   return targets
 end
 
-local function objdump_object(obj_file_path, directory)
-  local objdump_cmd = string.format(config.objdump_command, shell_quote_arg(obj_file_path))
+local function run_objdump(objdump_command, obj_file_path, directory)
+  local objdump_cmd = string.format(objdump_command, shell_quote_arg(obj_file_path))
   local result, exit_code = run_command(objdump_cmd, directory)
   if exit_code ~= 0 then
     return nil, "OBJDUMP FAILED: " .. result
   end
   return result, nil
+end
+
+local function objdump_object(obj_file_path, directory)
+  local result, objdump_error = run_objdump(config.objdump_command, obj_file_path, directory)
+  if result then
+    return result, nil
+  end
+
+  local errors = { objdump_error }
+  local fallback_commands = {
+    {
+      executable = "rust-objdump",
+      command = "rust-objdump -Sl --demangle --no-show-raw-insn -d %s",
+    },
+    {
+      executable = "llvm-objdump",
+      command = "llvm-objdump -Sl --demangle -Mintel --no-show-raw-insn -d %s",
+    },
+  }
+  for _, fallback in ipairs(fallback_commands) do
+    if vim.fn.executable(fallback.executable) == 1 then
+      result, objdump_error = run_objdump(fallback.command, obj_file_path, directory)
+      if result then
+        return result, nil
+      end
+      table.insert(errors, objdump_error)
+    end
+  end
+  return nil, table.concat(errors, "\n")
 end
 
 local function compile_and_objdump(command, directory, obj_file_path, delete_object, dependency_file_path)
@@ -570,8 +599,12 @@ end
 function M.search_target_line(current_file, current_line_nr, asm_buf, source_line_text)
   local target_line = 1
   local found_line = 0
-  --  Pattern for source line marker. e.g. /path/to/your/source.c:666
-  local search_pattern = string.format("^%s:%d", vim.fn.escape(current_file, [[\]^$.*~]]), current_line_nr)
+  -- Pattern for source line markers from GNU and LLVM objdump.
+  local search_pattern = string.format(
+    "^\\s*[;#]*\\s*%s:%d",
+    vim.fn.escape(current_file, [[\]^$.*~]]),
+    current_line_nr
+  )
   local search_result = vim.fn.searchpos(search_pattern, "nW")
   if search_result[1] > 0 then
     found_line = search_result[1]
@@ -588,14 +621,18 @@ function M.search_target_line(current_file, current_line_nr, asm_buf, source_lin
   end
 
   if found_line > 0 then
-    local instruction_pattern = "^\\s*[0-9a-fA-F]+:"
-    local next_instr_line = vim.fn.search(instruction_pattern, "nW", found_line)
-    if next_instr_line > 0 then
-      target_line = next_instr_line
-    else
-      target_line = found_line + 1
-      local line_count = vim.api.nvim_buf_line_count(asm_buf)
-      target_line = math.min(target_line, line_count)
+    local instruction_pattern = "^%s*[0-9a-fA-F]+:"
+    local line_count = vim.api.nvim_buf_line_count(asm_buf)
+    local scan_start = found_line
+    while scan_start < line_count do
+      local scan_end = math.min(scan_start + 64, line_count)
+      local lines = vim.api.nvim_buf_get_lines(asm_buf, scan_start, scan_end, false)
+      for offset, line in ipairs(lines) do
+        if line:match(instruction_pattern) then
+          return scan_start + offset
+        end
+      end
+      scan_start = scan_end
     end
   end
   return target_line
